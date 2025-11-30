@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kive"
+version = "0.1.0"
+description = "A lightweight memory system glue layer"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+keywords = ["memory", "ai", "cognee", "graphiti", "llama-index"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# 核心依赖(最小化)
+dependencies = [
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+# Client组件依赖
+client = [
+    "httpx>=0.27.0",
+]
+
+# Server组件依赖
+server = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "llama-index-core>=0.10.0",
+    "loguru>=0.7.0",
+]
+
+# Backend适配器依赖
+cognee = [
+    "cognee>=0.1.0",
+]
+
+graphiti = [
+    # "graphiti>=0.1.0",  # 等graphiti发布后取消注释
+]
+
+# 开发依赖
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+# 组合安装选项
+all = [
+    "kive[client]",
+    "kive[server]",
+    "kive[cognee]",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/kive"
+Documentation = "https://github.com/yourusername/kive#readme"
+Repository = "https://github.com/yourusername/kive"
+Issues = "https://github.com/yourusername/kive/issues"
+
+[tool.setuptools.packages.find]
+include = ["kive*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
