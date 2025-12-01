@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="#"><img src="https://raw.githubusercontent.com/yourusername/kive-ai/main/docs/assets/logo.png" alt="Kive Logo" width="120"></a>
+<a href="#"><img src="https://raw.githubusercontent.com/zhixiangxue/kive-ai/main/docs/assets/logo.png" alt="Kive Logo" width="120"></a>
 
 [![PyPI version](https://badge.fury.io/py/kive.svg)](https://badge.fury.io/py/kive)
 [![Python Version](https://img.shields.io/pypi/pyversions/kive)](https://pypi.org/project/kive/)
@@ -227,4 +227,4 @@ If you:
 
 Then Kive is made for you.
 
-<div align="right"><a href="#"><img src="https://raw.githubusercontent.com/yourusername/kive-ai/main/docs/assets/logo.png" alt="Kive Logo" width="120"></a></div>
+<div align="right"><a href="#"><img src="https://raw.githubusercontent.com/zhixiangxue/kive-ai/main/docs/assets/logo.png" alt="Kive Logo" width="120"></a></div>
