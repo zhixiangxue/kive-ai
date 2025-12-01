@@ -22,9 +22,30 @@ class BaseMemoryAdapter(ABC):
     
     def __init__(
         self,
+        # Auto-process configuration
         auto_process: bool = False,
         process_interval: int = 30,
         process_batch_size: int = 100,
+        # LLM configuration
+        llm_provider: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        llm_api_key: Optional[str] = None,
+        llm_base_url: Optional[str] = None,
+        # Embedding configuration
+        embedding_provider: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        embedding_api_key: Optional[str] = None,
+        embedding_base_url: Optional[str] = None,
+        embedding_dimensions: Optional[int] = None,
+        # Vector DB configuration
+        vector_db_provider: Optional[str] = None,
+        vector_db_uri: Optional[str] = None,
+        vector_db_key: Optional[str] = None,
+        # Graph DB configuration
+        graph_db_provider: Optional[str] = None,
+        graph_db_uri: Optional[str] = None,
+        graph_db_username: Optional[str] = None,
+        graph_db_password: Optional[str] = None,
         **kwargs
     ):
         """
@@ -32,11 +53,57 @@ class BaseMemoryAdapter(ABC):
             auto_process: Whether to automatically process data
             process_interval: Auto-process interval in seconds
             process_batch_size: Trigger processing immediately when reaching this count
+            
+            llm_provider: LLM provider (openai/anthropic/gemini/ollama/groq/mistral/custom)
+            llm_model: LLM model name
+            llm_api_key: LLM API key
+            llm_base_url: LLM API base URL (for custom providers)
+            
+            embedding_provider: Embedding provider (openai/ollama/custom)
+            embedding_model: Embedding model name
+            embedding_api_key: Embedding API key
+            embedding_base_url: Embedding API base URL
+            embedding_dimensions: Embedding dimensions
+            
+            vector_db_provider: Vector database provider (chromadb/lancedb)
+            vector_db_uri: Vector database connection URI
+            vector_db_key: Vector database authentication key
+            
+            graph_db_provider: Graph database provider (kuzu/neo4j/falkordb/networkx)
+            graph_db_uri: Graph database connection URI
+            graph_db_username: Graph database username (for Neo4j)
+            graph_db_password: Graph database password (for Neo4j)
+            
             **kwargs: Backend-specific configuration parameters
         """
+        # Auto-process configuration
         self.auto_process = auto_process
         self.process_interval = process_interval
         self.process_batch_size = process_batch_size
+        
+        # LLM configuration
+        self.llm_provider = llm_provider
+        self.llm_model = llm_model
+        self.llm_api_key = llm_api_key
+        self.llm_base_url = llm_base_url
+        
+        # Embedding configuration
+        self.embedding_provider = embedding_provider
+        self.embedding_model = embedding_model
+        self.embedding_api_key = embedding_api_key
+        self.embedding_base_url = embedding_base_url
+        self.embedding_dimensions = embedding_dimensions
+        
+        # Vector DB configuration
+        self.vector_db_provider = vector_db_provider
+        self.vector_db_uri = vector_db_uri
+        self.vector_db_key = vector_db_key
+        
+        # Graph DB configuration
+        self.graph_db_provider = graph_db_provider
+        self.graph_db_uri = graph_db_uri
+        self.graph_db_username = graph_db_username
+        self.graph_db_password = graph_db_password
         
         # Internal state
         self._pending_count = 0  # Pending count

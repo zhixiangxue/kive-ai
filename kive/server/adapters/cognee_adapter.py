@@ -12,6 +12,7 @@ from ...exceptions import AdapterError, ConnectionError, SearchError
 from ...models import BackendType, CogneeBackendData, Memo
 from .base import BaseMemoryAdapter
 from ...utils.logger import logger
+from .llm_bridge import LLMConfigBridge, UnifiedLLMConfig, LLMProvider, LLMProviderType
 
 
 class CogneeAdapter(BaseMemoryAdapter):
@@ -26,24 +27,24 @@ class CogneeAdapter(BaseMemoryAdapter):
         process_interval: int = 30,
         process_batch_size: int = 100,
         # LLM configuration
-        llm_provider: Optional[str] = None,
+        llm_provider: Optional[LLMProviderType] = None,
         llm_model: Optional[str] = None,
         llm_api_key: Optional[str] = None,
-        llm_endpoint: Optional[str] = None,  # For custom provider
+        llm_base_url: Optional[str] = None,
         # Embedding configuration
-        embedding_provider: Optional[str] = None,
+        embedding_provider: Optional[LLMProviderType] = None,
         embedding_model: Optional[str] = None,
         embedding_api_key: Optional[str] = None,
-        embedding_endpoint: Optional[str] = None,  # For custom/ollama provider
-        embedding_dimensions: Optional[int] = None,  # For custom provider
+        embedding_base_url: Optional[str] = None,
+        embedding_dimensions: Optional[int] = None,
         huggingface_tokenizer: Optional[str] = None,  # For ollama provider
         # Vector DB configuration
         vector_db_provider: Optional[str] = None,
-        vector_db_url: Optional[str] = None,  # For ChromaDB: http://localhost:8000, For LanceDB: file path
-        vector_db_key: Optional[str] = None,  # For ChromaDB authentication token
+        vector_db_uri: Optional[str] = None,
+        vector_db_key: Optional[str] = None,
         # Graph DB configuration
-        graph_database_provider: Optional[str] = None,
-        graph_database_url: Optional[str] = None,
+        graph_db_provider: Optional[str] = None,
+        graph_db_uri: Optional[str] = None,
     ):
         """
         Args:
@@ -54,14 +55,14 @@ class CogneeAdapter(BaseMemoryAdapter):
             llm_provider: LLM provider (openai/anthropic/gemini/ollama/mistral/custom)
             llm_model: LLM model name
             llm_api_key: LLM API key
-            llm_endpoint: LLM API endpoint (for custom provider, e.g., Bailain)
+            llm_base_url: LLM API base URL (for custom provider, e.g., Bailain)
             
             embedding_provider: Embedding provider (ollama/custom)
             embedding_model: Embedding model name
                 - Ollama: e.g., nomic-embed-text:latest
                 - Custom: e.g., provider/your-embedding-model
             embedding_api_key: Embedding API key (required for custom provider)
-            embedding_endpoint: Embedding API endpoint
+            embedding_base_url: Embedding API base URL
                 - Ollama: e.g., http://localhost:11434/api/embed
                 - Custom: e.g., https://your-endpoint.example.com/v1
             embedding_dimensions: Embedding dimensions (required for custom provider)
@@ -69,40 +70,37 @@ class CogneeAdapter(BaseMemoryAdapter):
                 - Example: nomic-ai/nomic-embed-text-v1.5
             
             vector_db_provider: Vector database provider (chromadb/lancedb)
-            vector_db_url: Vector database connection URL
+            vector_db_uri: Vector database connection URI
                 - ChromaDB: HTTP service address, e.g., http://localhost:8000
                 - LanceDB: File path, e.g., /path/to/cognee.lancedb (optional, defaults to system directory)
             vector_db_key: Vector database authentication key
                 - ChromaDB: Requires authentication token
                 - LanceDB: Not required
             
-            graph_database_provider: Graph database provider (kuzu/neo4j)
-            graph_database_url: Graph database connection URL
+            graph_db_provider: Graph database provider (kuzu/neo4j/networkx)
+            graph_db_uri: Graph database connection URI
         """
         super().__init__(
             auto_process=auto_process,
             process_interval=process_interval,
-            process_batch_size=process_batch_size
+            process_batch_size=process_batch_size,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            llm_api_key=llm_api_key,
+            llm_base_url=llm_base_url,
+            embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
+            embedding_api_key=embedding_api_key,
+            embedding_base_url=embedding_base_url,
+            embedding_dimensions=embedding_dimensions,
+            vector_db_provider=vector_db_provider,
+            vector_db_uri=vector_db_uri,
+            vector_db_key=vector_db_key,
+            graph_db_provider=graph_db_provider,
+            graph_db_uri=graph_db_uri,
         )
-        # Store configuration
-        self.llm_provider = llm_provider
-        self.llm_model = llm_model
-        self.llm_api_key = llm_api_key
-        self.llm_endpoint = llm_endpoint
-        
-        self.embedding_provider = embedding_provider
-        self.embedding_model = embedding_model
-        self.embedding_api_key = embedding_api_key
-        self.embedding_endpoint = embedding_endpoint
-        self.embedding_dimensions = embedding_dimensions
+        # Store Cognee-specific configuration
         self.huggingface_tokenizer = huggingface_tokenizer
-        
-        self.vector_db_provider = vector_db_provider
-        self.vector_db_url = vector_db_url
-        self.vector_db_key = vector_db_key
-        
-        self.graph_database_provider = graph_database_provider
-        self.graph_database_url = graph_database_url
         
         self._cognee = None
     
@@ -155,8 +153,8 @@ class CogneeAdapter(BaseMemoryAdapter):
                     os.environ["EMBEDDING_MODEL"] = self.embedding_model
                     os.environ["HUGGINGFACE_TOKENIZER"] = self.huggingface_tokenizer
                     
-                    if self.embedding_endpoint:
-                        os.environ["EMBEDDING_ENDPOINT"] = self.embedding_endpoint
+                    if self.embedding_base_url:
+                        os.environ["EMBEDDING_ENDPOINT"] = self.embedding_base_url
                     
                     if self.embedding_dimensions:
                         os.environ["EMBEDDING_DIMENSIONS"] = str(self.embedding_dimensions)
@@ -183,13 +181,13 @@ class CogneeAdapter(BaseMemoryAdapter):
                     
                     os.environ["EMBEDDING_PROVIDER"] = self.embedding_provider
                     os.environ["EMBEDDING_MODEL"] = self.embedding_model
-                    os.environ["EMBEDDING_ENDPOINT"] = self.embedding_endpoint
+                    os.environ["EMBEDDING_ENDPOINT"] = self.embedding_base_url
                     os.environ["EMBEDDING_DIMENSIONS"] = str(self.embedding_dimensions)
                     
                     if self.embedding_api_key:
                         os.environ["EMBEDDING_API_KEY"] = self.embedding_api_key
                     
-                    logger.info(f"Embedding config (custom): model={self.embedding_model}, endpoint={self.embedding_endpoint}")
+                    logger.info(f"Embedding config (custom): model={self.embedding_model}, base_url={self.embedding_base_url}")
                 
                 # Currently only supports Ollama and Custom
                 else:
@@ -198,17 +196,17 @@ class CogneeAdapter(BaseMemoryAdapter):
                         "Currently only 'ollama' and 'custom' are supported."
                     )
             
-            # 2. Configure LLM
+            # 2. Configure LLM using bridge
             if self.llm_api_key or self.llm_provider or self.llm_model:
-                llm_config = {}
-                if self.llm_api_key:
-                    llm_config["llm_api_key"] = self.llm_api_key
-                if self.llm_provider:
-                    llm_config["llm_provider"] = self.llm_provider
-                if self.llm_model:
-                    llm_config["llm_model"] = self.llm_model
-                if self.llm_endpoint:
-                    llm_config["llm_endpoint"] = self.llm_endpoint
+                unified_llm_config = UnifiedLLMConfig(
+                    provider=LLMProvider(self.llm_provider) if self.llm_provider else LLMProvider.OPENAI,
+                    model=self.llm_model or "gpt-4o-mini",
+                    api_key=self.llm_api_key,
+                    base_url=self.llm_base_url,
+                )
+                
+                bridge = LLMConfigBridge()
+                llm_config = bridge.to_cognee(unified_llm_config)
                 
                 cognee.config.set_llm_config(llm_config)
                 logger.info(f"LLM config set: {llm_config}")
@@ -221,13 +219,13 @@ class CogneeAdapter(BaseMemoryAdapter):
                 
                 # ChromaDB: Requires HTTP URL and authentication token
                 if self.vector_db_provider == "chromadb":
-                    if not self.vector_db_url:
+                    if not self.vector_db_uri:
                         raise ValueError(
-                            "ChromaDB requires vector_db_url (e.g., http://localhost:8000). "
-                            "Please provide vector_db_url parameter."
+                            "ChromaDB requires vector_db_uri (e.g., http://localhost:8000). "
+                            "Please provide vector_db_uri parameter."
                         )
                     
-                    vector_config["vector_db_url"] = self.vector_db_url
+                    vector_config["vector_db_url"] = self.vector_db_uri
                     
                     # vector_db_key can be empty string (compatible with unauthenticated ChromaDB)
                     if self.vector_db_key:
@@ -238,14 +236,14 @@ class CogneeAdapter(BaseMemoryAdapter):
                 
                 # LanceDB: File-based database, URL is optional file path
                 elif self.vector_db_provider == "lancedb":
-                    if self.vector_db_url:
+                    if self.vector_db_uri:
                         # Ensure path is absolute
                         from pathlib import Path
-                        lancedb_path = Path(self.vector_db_url)
+                        lancedb_path = Path(self.vector_db_uri)
                         if not lancedb_path.is_absolute():
                             lancedb_path = Path.cwd() / lancedb_path
                         vector_config["vector_db_url"] = str(lancedb_path)
-                    # If URL not provided, LanceDB will use default system directory, no need to set
+                    # If URI not provided, LanceDB will use default system directory, no need to set
                 
                 # Currently only supports ChromaDB and LanceDB
                 else:
@@ -258,13 +256,13 @@ class CogneeAdapter(BaseMemoryAdapter):
                 logger.info(f"Vector DB config set: {vector_config}")
             
             # 4. Configure Graph DB
-            if self.graph_database_provider:
+            if self.graph_db_provider:
                 graph_config = {
-                    "graph_database_provider": self.graph_database_provider
+                    "graph_database_provider": self.graph_db_provider
                 }
-                # Kuzu embedded doesn't need URL
-                if self.graph_database_url and self.graph_database_provider not in ["kuzu", "networkx"]:
-                    graph_config["graph_database_url"] = self.graph_database_url
+                # Kuzu embedded doesn't need URI
+                if self.graph_db_uri and self.graph_db_provider not in ["kuzu", "networkx"]:
+                    graph_config["graph_database_url"] = self.graph_db_uri
                 
                 cognee.config.set_graph_db_config(graph_config)
                 logger.info(f"Graph DB config set: {graph_config}")
@@ -272,13 +270,13 @@ class CogneeAdapter(BaseMemoryAdapter):
             config_summary = {
                 "llm_provider": self.llm_provider,
                 "llm_model": self.llm_model,
-                "llm_endpoint": self.llm_endpoint,
+                "llm_base_url": self.llm_base_url,
                 "embedding_provider": self.embedding_provider,
                 "embedding_model": self.embedding_model,
                 "vector_db_provider": self.vector_db_provider,
-                "vector_db_url": self.vector_db_url,
-                "vector_db_key": "***" if self.vector_db_key else None,  # 隐藏敏感信息
-                "graph_database_provider": self.graph_database_provider,
+                "vector_db_uri": self.vector_db_uri,
+                "vector_db_key": "***" if self.vector_db_key else None,
+                "graph_db_provider": self.graph_db_provider,
             }
             logger.info(f"CogneeAdapter initialized with config: {config_summary}")
             

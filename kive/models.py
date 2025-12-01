@@ -16,6 +16,7 @@ class BackendType(str, Enum):
     """Backend type enumeration"""
     COGNEE = "cognee"
     GRAPHITI = "graphiti"
+    MEM0 = "mem0"
 
 
 class BackendData(BaseModel):
@@ -43,6 +44,51 @@ class CogneeBackendData(BackendData):
                 "version": "0.4.1",
                 "data_id": "58422078-c384-5642-9621-2ca0b90bb97b",
                 "dataset_id": "a3c54e4c-bf9d-59c7-b4a2-ff66b6ca1122",
+            }
+        }
+
+
+class GraphitiBackendData(BackendData):
+    """Graphiti backend specific data"""
+    episode_id: str = Field(..., description="Graphiti episode UUID")
+    source: str = Field(default="text", description="Episode source type (text/json)")
+    source_description: Optional[str] = Field(None, description="Episode source description")
+    
+    class Config:
+        use_enum_values = True
+        json_schema_extra = {
+            "example": {
+                "type": "graphiti",
+                "version": "0.24.1",
+                "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+                "source": "text",
+                "source_description": "user input",
+            }
+        }
+
+
+class Mem0BackendData(BackendData):
+    """Mem0 backend specific data"""
+    memory_id: str = Field(..., description="Mem0 memory ID")
+    user_id: str = Field(..., description="User ID in mem0 (required by mem0 API)")
+    agent_id: Optional[str] = Field(None, description="Agent ID in mem0")
+    run_id: Optional[str] = Field(None, description="Run ID in mem0")
+    
+    # Graph relations (if graph store enabled)
+    # mem0 returns: {"deleted_entities": [...], "added_entities": [...]}
+    relations: Optional[Dict[str, Any]] = Field(None, description="Graph relations from mem0")
+    
+    class Config:
+        use_enum_values = True
+        json_schema_extra = {
+            "example": {
+                "type": "mem0",
+                "version": "0.1.0",
+                "memory_id": "m-abc123xyz",
+                "user_id": "kive_user",
+                "agent_id": None,
+                "run_id": None,
+                "relations": None,
             }
         }
 

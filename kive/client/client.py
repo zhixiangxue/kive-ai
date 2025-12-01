@@ -16,7 +16,7 @@ class Client:
     """Kive客户端
     
     使用示例:
-        client = Client("http://localhost:8000")
+        client = Client("http://localhost:12306")
         
         # 添加记忆
         ids = await client.add(text="这是一段记忆")
@@ -29,15 +29,15 @@ class Client:
     
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        server_url: str = "http://localhost:12306",
         timeout: float = 30.0
     ):
         """
         Args:
-            base_url: Kive服务器地址
-            timeout: 请求超时时间(秒)
+            server_url: Kive server address
+            timeout: Request timeout (seconds)
         """
-        self.base_url = base_url.rstrip("/")
+        self.server_url = server_url.rstrip("/")
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=timeout)
     
@@ -97,7 +97,7 @@ class Client:
             raise KiveError("At least one of text/file/url must be provided")
         
         response = await self.client.post(
-            f"{self.base_url}/api/v1/memos",
+            f"{self.server_url}/api/v1/memos",
             json=data
         )
         result = self._handle_response(response)
@@ -123,7 +123,7 @@ class Client:
             KiveError: Raised when add fails
         """
         response = await self.client.post(
-            f"{self.base_url}/api/v1/memos/batch",
+            f"{self.server_url}/api/v1/memos/batch",
             json={"items": items}
         )
         result = self._handle_response(response)
@@ -144,7 +144,7 @@ class Client:
             KiveError: Raised when process fails
         """
         response = await self.client.post(
-            f"{self.base_url}/api/v1/process",
+            f"{self.server_url}/api/v1/process",
             params={"background": background}
         )
         result = self._handle_response(response)
@@ -163,7 +163,7 @@ class Client:
             KiveError: Raised when query fails
         """
         response = await self.client.get(
-            f"{self.base_url}/api/v1/process/{task_id}"
+            f"{self.server_url}/api/v1/process/{task_id}"
         )
         result = self._handle_response(response)
         return ProcessTask(**result)
@@ -193,7 +193,7 @@ class Client:
         params.update(kwargs)
         
         response = await self.client.get(
-            f"{self.base_url}/api/v1/memos/search",
+            f"{self.server_url}/api/v1/memos/search",
             params=params
         )
         result = self._handle_response(response)
@@ -212,7 +212,7 @@ class Client:
             KiveError: Raised when get fails
         """
         response = await self.client.get(
-            f"{self.base_url}/api/v1/memos/{memo_id}"
+            f"{self.server_url}/api/v1/memos/{memo_id}"
         )
         result = self._handle_response(response)
         return Memo(**result) if result else None
@@ -245,7 +245,7 @@ class Client:
             data["metadata"] = metadata
         
         response = await self.client.put(
-            f"{self.base_url}/api/v1/memos/{memo_id}",
+            f"{self.server_url}/api/v1/memos/{memo_id}",
             json=data
         )
         result = self._handle_response(response)
@@ -265,7 +265,7 @@ class Client:
         """
         response = await self.client.request(
             "DELETE",
-            f"{self.base_url}/api/v1/memos",
+            f"{self.server_url}/api/v1/memos",
             json={"memo_ids": memo_ids}
         )
         result = self._handle_response(response)
@@ -280,6 +280,6 @@ class Client:
             服务状态信息
         """
         response = await self.client.get(
-            f"{self.base_url}/api/v1/health"
+            f"{self.server_url}/api/v1/health"
         )
         return self._handle_response(response)

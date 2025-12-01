@@ -53,6 +53,11 @@ graphiti = [
     # "graphiti>=0.1.0",  # 等graphiti发布后取消注释
 ]
 
+mem0 = [
+    "mem0ai>=0.1.0",
+    "chromadb>=0.4.0",  # 嵌入式向量数据库
+]
+
 # 开发依赖
 dev = [
     "pytest>=7.0.0",
@@ -67,6 +72,7 @@ all = [
     "kive[client]",
     "kive[server]",
     "kive[cognee]",
+    "kive[mem0]",
 ]
 
 [project.urls]
