@@ -4,9 +4,9 @@
 
 [![PyPI version](https://badge.fury.io/py/kive.svg)](https://badge.fury.io/py/kive)
 [![Python Version](https://img.shields.io/pypi/pyversions/kive)](https://pypi.org/project/kive/)
-[![License](https://img.shields.io/github/license/yourusername/kive-ai)](https://github.com/yourusername/kive-ai/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/zhixiangxue/kive-ai)](https://github.com/zhixiangxue/kive-ai/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/kive)](https://pypi.org/project/kive/)
-[![GitHub Stars](https://img.shields.io/github/stars/yourusername/kive-ai?style=social)](https://github.com/yourusername/kive-ai)
+[![GitHub Stars](https://img.shields.io/github/stars/zhixiangxue/kive-ai?style=social)](https://github.com/zhixiangxue/kive-ai)
 
 [English](README.md) | [中文](docs/README_CN.md)
 
