@@ -298,92 +298,93 @@ class Mem0Adapter(BaseMemoryAdapter):
             updated_at=datetime.now(),
         )
     
-    async def add(self, documents: List[Document], **kwargs) -> List[Memo]:
-        """Add documents to Mem0 as memories"""
+    async def add(self, request: 'AddMemoRequest') -> List[Memo]:
+        """Add documents to Mem0 as memories
+        
+        Args:
+            request: AddMemoRequest with text and context fields
+        """
         try:
             if not self._memory:
                 raise AdapterError("Mem0 not initialized, call initialize() first")
             
-            logger.info(f"Starting add operation for {len(documents)} documents...")
+            # Import models
+            from .request_bridge import RequestBridge
+            from ...models import AddMemoRequest
             
-            # Get user_id, agent_id, run_id from kwargs or use defaults
-            user_id = kwargs.get("user_id", self.default_user_id)
-            agent_id = kwargs.get("agent_id", self.default_agent_id)
-            run_id = kwargs.get("run_id", self.default_run_id)
+            logger.info(f"Starting add operation with request: namespace={request.namespace}, user_id={request.user_id}")
+            
+            # Use bridge to get Mem0 parameters
+            bridge = RequestBridge()
+            mem0_params = bridge.to_mem0_add(request)
+            
+            # Get external metadata (with Kive context)
+            external_metadata = bridge.get_external_metadata(request)
+            
+            # Add to mem0
+            result = await self._memory.add(
+                messages=mem0_params["messages"],
+                user_id=mem0_params["user_id"],
+                agent_id=mem0_params.get("agent_id"),
+                run_id=mem0_params.get("run_id"),
+                metadata=external_metadata,  # Include Kive context
+                infer=mem0_params.get("infer", True),
+            )
+            
+            # Debug: log the actual result structure
+            logger.info(f"Mem0 add result type: {type(result)}")
+            logger.info(f"Mem0 add result: {result}")
             
             memos = []
             
-            for doc in documents:
-                # Convert Document to messages format for mem0
-                # mem0 expects messages = [{"role": "user", "content": "..."}]
-                messages = [
-                    {"role": "user", "content": doc.text}
-                ]
+            # Extract memory_id and relations from result
+            # mem0 returns: {"results": [...], "relations": {...}} or {"results": [...]}
+            if isinstance(result, dict):
+                # Get graph relations (shared across all results)
+                graph_relations = result.get("relations")
                 
-                # Add to mem0
-                # Get infer parameter from kwargs, default to True (mem0's default behavior)
-                infer = kwargs.get("infer", True)
-                
-                add_kwargs = {"user_id": user_id, "infer": infer}
-                if agent_id:
-                    add_kwargs["agent_id"] = agent_id
-                if run_id:
-                    add_kwargs["run_id"] = run_id
-                
-                result = await self._memory.add(messages, **add_kwargs)
-                
-                # Debug: log the actual result structure
-                logger.info(f"Mem0 add result type: {type(result)}")
-                logger.info(f"Mem0 add result: {result}")
-                
-                # Extract memory_id and relations from result
-                # mem0 returns: {"results": [...], "relations": {...}} or {"results": [...]}
-                if isinstance(result, dict):
-                    # Get graph relations (shared across all results)
-                    graph_relations = result.get("relations")
-                    
-                    # Process vector store results
-                    if "results" in result and result["results"]:
-                        logger.info(f"Found {len(result['results'])} vector store results")
-                        for item in result["results"]:
-                            memory_id = item.get("id", str(item))
-                            memory_text = item.get("memory", doc.text)
-                            
-                            memo = self._create_memo(
-                                memo_id=memory_id,
-                                text=memory_text,
-                                user_id=user_id,
-                                agent_id=agent_id,
-                                run_id=run_id,
-                                metadata=doc.metadata,
-                                relations=graph_relations,
-                            )
-                            memos.append(memo)
-                    else:
-                        # No vector results - mem0 decided not to store this as a memory
-                        # This can happen when content is filtered, deduplicated, or only graph relations are extracted
-                        if graph_relations:
-                            logger.warning(
-                                f"Mem0 did not create a memory (results is empty), only graph relations extracted. "
-                                f"Document: '{doc.text[:50]}...'"
-                            )
-                        else:
-                            logger.warning(
-                                f"Mem0 did not create a memory or relations. "
-                                f"Document: '{doc.text[:50]}...'"
-                            )
+                # Process vector store results
+                if "results" in result and result["results"]:
+                    logger.info(f"Found {len(result['results'])} vector store results")
+                    for item in result["results"]:
+                        memory_id = item.get("id", str(item))
+                        memory_text = item.get("memory", request.text)
+                        
+                        memo = self._create_memo(
+                            memo_id=memory_id,
+                            text=memory_text,
+                            user_id=mem0_params["user_id"],
+                            agent_id=mem0_params.get("agent_id"),
+                            run_id=mem0_params.get("run_id"),
+                            metadata=external_metadata,
+                            relations=graph_relations,
+                        )
+                        memos.append(memo)
                 else:
-                    # Fallback: create memo with generated ID
-                    logger.warning(f"Unexpected add result format: {result}")
-                    memo = self._create_memo(
-                        memo_id=str(result),
-                        text=doc.text,
-                        user_id=user_id,
-                        agent_id=agent_id,
-                        run_id=run_id,
-                        metadata=doc.metadata,
-                    )
-                    memos.append(memo)
+                    # No vector results - mem0 decided not to store this as a memory
+                    # This can happen when content is filtered, deduplicated, or only graph relations are extracted
+                    if graph_relations:
+                        logger.warning(
+                            f"Mem0 did not create a memory (results is empty), only graph relations extracted. "
+                            f"Text: '{request.text[:50] if request.text else 'N/A'}...'"
+                        )
+                    else:
+                        logger.warning(
+                            f"Mem0 did not create a memory or relations. "
+                            f"Text: '{request.text[:50] if request.text else 'N/A'}...'"
+                        )
+            else:
+                # Fallback: create memo with generated ID
+                logger.warning(f"Unexpected add result format: {result}")
+                memo = self._create_memo(
+                    memo_id=str(result),
+                    text=request.text or "",
+                    user_id=mem0_params["user_id"],
+                    agent_id=mem0_params.get("agent_id"),
+                    run_id=mem0_params.get("run_id"),
+                    metadata=external_metadata,
+                )
+                memos.append(memo)
             
             logger.info(f"Added {len(memos)} memories to Mem0")
             return memos
@@ -394,43 +395,37 @@ class Mem0Adapter(BaseMemoryAdapter):
     
     async def search(
         self,
-        query: str,
-        limit: int = 10,
-        **kwargs
+        request: 'SearchMemoRequest'
     ) -> List[Memo]:
         """Search in Mem0
         
         Args:
-            query: Search query text
-            limit: Maximum number of results
-            **kwargs: Additional parameters (rerank, filters, etc.)
+            request: SearchMemoRequest with query and context fields
         """
         try:
             if not self._memory:
                 raise AdapterError("Mem0 not initialized")
             
-            # Get user_id, agent_id, run_id from kwargs or use defaults
-            user_id = kwargs.get("user_id", self.default_user_id)
-            agent_id = kwargs.get("agent_id", self.default_agent_id)
-            run_id = kwargs.get("run_id", self.default_run_id)
+            # Import models
+            from .request_bridge import RequestBridge
+            from ...models import SearchMemoRequest
+            
+            # Use bridge to get Mem0 parameters
+            bridge = RequestBridge()
+            mem0_params = bridge.to_mem0_search(request)
             
             # Enable reranking if reranker is configured
-            rerank = kwargs.get("rerank", bool(self.reranker_provider))
-            
-            # Build search kwargs
-            search_kwargs = {
-                "user_id": user_id,
-                "limit": limit,
-                "rerank": rerank,
-            }
-            
-            if agent_id:
-                search_kwargs["agent_id"] = agent_id
-            if run_id:
-                search_kwargs["run_id"] = run_id
+            rerank = bool(self.reranker_provider)
             
             # Call mem0.search
-            search_results = await self._memory.search(query, **search_kwargs)
+            search_results = await self._memory.search(
+                query=mem0_params["query"],
+                user_id=mem0_params["user_id"],
+                agent_id=mem0_params.get("agent_id"),
+                run_id=mem0_params.get("run_id"),
+                limit=mem0_params["limit"],
+                rerank=rerank,
+            )
             
             logger.info(f"Search returned {len(search_results.get('results', [])) if isinstance(search_results, dict) else 0} results")
             
@@ -438,7 +433,7 @@ class Mem0Adapter(BaseMemoryAdapter):
             memos = []
             
             if isinstance(search_results, dict) and "results" in search_results:
-                for i, result in enumerate(search_results["results"][:limit]):
+                for i, result in enumerate(search_results["results"][:mem0_params["limit"]]):
                     memory_id = result.get("id", f"search_result_{i}")
                     memory_text = result.get("memory", "")
                     memory_score = result.get("score", 1.0 - (i * 0.05))
@@ -450,16 +445,16 @@ class Mem0Adapter(BaseMemoryAdapter):
                     memo = self._create_memo(
                         memo_id=memory_id,
                         text=memory_text,
-                        user_id=user_id,
-                        agent_id=agent_id,
-                        run_id=run_id,
+                        user_id=mem0_params["user_id"],
+                        agent_id=mem0_params.get("agent_id"),
+                        run_id=mem0_params.get("run_id"),
                         metadata=metadata,
                         relations=relations,
                         score=memory_score,
                     )
                     memos.append(memo)
             
-            logger.info(f"Search completed: query='{query}', results={len(memos)}")
+            logger.info(f"Search completed: query='{mem0_params["query"]}', results={len(memos)}")
             return memos
             
         except Exception as e:
@@ -553,13 +548,16 @@ class Mem0Adapter(BaseMemoryAdapter):
                 memory_text = document.text
                 relations = None
             
+            # Merge metadata: preserve original memo metadata + new document metadata
+            updated_metadata = {**memo.metadata, **(document.metadata or {})}
+            
             updated_memo = self._create_memo(
                 memo_id=backend_data.memory_id,
                 text=memory_text,
                 user_id=backend_data.user_id,
                 agent_id=backend_data.agent_id,
                 run_id=backend_data.run_id,
-                metadata=document.metadata,
+                metadata=updated_metadata,  # Preserve Kive context
                 relations=relations,
             )
             

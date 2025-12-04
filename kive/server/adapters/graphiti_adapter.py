@@ -137,6 +137,39 @@ class GraphitiAdapter(BaseMemoryAdapter):
                 logger.info(f"Kuzu database path: {db_path}")
                 graph_driver = KuzuDriver(db=db_path)
                 
+                # ============================================================
+                # TODO: Remove this workaround when Graphiti fixes KuzuDriver bug
+                # ============================================================
+                # Issue: Graphiti's add_episode() (line 698/883) checks:
+                #        if group_id != self.driver._database:
+                #        but KuzuDriver does NOT have `_database` attribute
+                # 
+                # Root Cause:
+                #   - Graphiti assumes all drivers have `_database` for multi-db support
+                #   - Neo4j/FalkorDB drivers have this attribute
+                #   - KuzuDriver is embedded (one file = one database), doesn't need it
+                #   - See: .venv/Lib/site-packages/graphiti_core/driver/kuzu_driver.py:97-107
+                # 
+                # Error:
+                #   AttributeError: 'KuzuDriver' object has no attribute '_database'
+                # 
+                # Workaround:
+                #   Monkey-patch `_database` attribute to None (Kuzu doesn't use it)
+                #   This allows Graphiti's check to pass without breaking other drivers
+                # 
+                # Impact:
+                #   - ✅ Fixes Kuzu compatibility
+                #   - ✅ Does NOT affect Neo4j/FalkorDB (they have their own _database)
+                #   - ✅ group_id still works for namespace isolation
+                # 
+                # Upstream Issue: https://github.com/getzep/graphiti/issues/XXX
+                # Related: kive/server/adapters/request_bridge.py:to_graphiti_add()
+                # ============================================================
+                if not hasattr(graph_driver, '_database'):
+                    graph_driver._database = None  # Kuzu doesn't support multi-database
+                    logger.info("Applied KuzuDriver._database workaround for Graphiti compatibility")
+                # ============================================================
+                
                 # Apply Kuzu FTS indices extension immediately after driver creation
                 # This must be done before Graphiti initialization
                 from .extensions.graphiti.drivers import patch_kuzu_fulltext_indices
@@ -288,91 +321,98 @@ class GraphitiAdapter(BaseMemoryAdapter):
             updated_at=datetime.now(),
         )
     
-    async def add(self, documents: List[Document], **kwargs) -> List[Memo]:
-        """Add documents to Graphiti as episodes"""
+    async def add(self, request: 'AddMemoRequest') -> List[Memo]:
+        """Add documents to Graphiti as episodes
+        
+        Args:
+            request: AddMemoRequest with text and context fields
+        """
         try:
             if not self._graphiti:
                 raise AdapterError("Graphiti not initialized, call initialize() first")
             
+            # Import models
+            from .request_bridge import RequestBridge
+            from ...models import AddMemoRequest
             from graphiti_core.nodes import EpisodeType
             
-            logger.info(f"Starting add operation for {len(documents)} documents...")
+            logger.info(f"Starting add operation with request: namespace={request.namespace}, user_id={request.user_id}")
             
-            memos = []
-            source_description = kwargs.get("source_description", self.default_source_description)
+            # Use bridge to get Graphiti parameters
+            bridge = RequestBridge()
+            graphiti_params = bridge.to_graphiti_add(request)
             
-            for i, doc in enumerate(documents):
-                # Determine episode name
-                episode_name = doc.metadata.get("name", f"kive_episode_{i}")
-                
-                # Determine episode type and content
-                episode_body = doc.text
-                source_type = EpisodeType.text  # Use EpisodeType enum instead of string
-                
-                # Add episode to Graphiti
-                # Returns AddEpisodeResults with episode, nodes, edges, etc.
-                add_result = await self._graphiti.add_episode(
-                    name=episode_name,
-                    episode_body=episode_body,
-                    source=source_type,
-                    source_description=source_description,
-                    reference_time=datetime.now(timezone.utc),
-                )
-                
-                # Extract episode from result
-                episode = add_result.episode
-                
-                # Create Memo
-                memo = self._create_memo(
-                    memo_id=str(episode.uuid),
-                    text=doc.text,
-                    episode_id=str(episode.uuid),
-                    source=source_type.name,  # Store enum name as string
-                    source_description=source_description,
-                    metadata=doc.metadata,
-                )
-                memos.append(memo)
-                
-                logger.info(f"Added episode: {episode_name}, UUID: {episode.uuid}")
+            # Add episode to Graphiti
+            add_result = await self._graphiti.add_episode(
+                name=graphiti_params["name"],
+                episode_body=graphiti_params["episode_body"],
+                source=EpisodeType.text,
+                source_description=graphiti_params["source_description"],
+                reference_time=graphiti_params["reference_time"],
+                group_id=graphiti_params["group_id"],
+            )
             
-            logger.info(f"Added {len(documents)} documents to Graphiti")
-            return memos
+            # Extract episode from result
+            episode = add_result.episode
+            
+            # Get external metadata (with Kive context)
+            external_metadata = bridge.get_external_metadata(request)
+            
+            # Create Memo
+            memo = self._create_memo(
+                memo_id=str(episode.uuid),
+                text=request.text or "",
+                episode_id=str(episode.uuid),
+                source=EpisodeType.text.name,
+                source_description=graphiti_params["source_description"],
+                metadata=external_metadata,
+            )
+            
+            logger.info(f"Added episode: {graphiti_params['name']}, UUID: {episode.uuid}")
+            logger.info(f"Added 1 episode to Graphiti namespace '{request.namespace}'")
+            
+            return [memo]
             
         except Exception as e:
-            logger.error(f"Failed to add documents: {e}")
-            raise AdapterError(f"Failed to add documents: {e}")
+            logger.error(f"Failed to add episode: {e}")
+            raise AdapterError(f"Failed to add episode: {e}")
     
-    async def search(
-        self,
-        query: str,
-        limit: int = 10,
-        **kwargs
-    ) -> List[Memo]:
+    async def search(self, request: 'SearchMemoRequest') -> List[Memo]:
         """Search in Graphiti using hybrid search
         
         Args:
-            query: Search query text
-            limit: Maximum number of results
-            **kwargs: Additional parameters (center_node_uuid, etc.)
+            request: SearchMemoRequest with query and context fields
         """
         try:
             if not self._graphiti:
                 raise AdapterError("Graphiti not initialized")
             
-            # Get optional center node for reranking
-            center_node_uuid = kwargs.get("center_node_uuid")
+            # Import models
+            from .request_bridge import RequestBridge
+            from ...models import SearchMemoRequest
+            
+            logger.info(f"Starting search with query='{request.query}', namespace={request.namespace}")
+            
+            # Use bridge to get Graphiti parameters
+            bridge = RequestBridge()
+            graphiti_params = bridge.to_graphiti_search(request)
             
             # Call graphiti.search
-            search_results = await self._graphiti.search(
-                query,
-                center_node_uuid=center_node_uuid,
-            )
+            search_kwargs = {
+                "query": request.query,
+            }
+            
+            # Add group_ids if provided
+            if graphiti_params.get("group_ids"):
+                search_kwargs["group_ids"] = graphiti_params["group_ids"]
+            
+            search_results = await self._graphiti.search(**search_kwargs)
             
             logger.info(f"Search returned {len(search_results) if search_results else 0} results")
             
             # Convert search results to Memos
             memos = []
-            for i, result in enumerate(search_results[:limit] if search_results else []):
+            for i, result in enumerate(search_results[:request.limit] if search_results else []):
                 # Graphiti returns Edge objects with fact, uuid, etc.
                 result_id = str(result.uuid)
                 result_text = result.fact
@@ -386,6 +426,11 @@ class GraphitiAdapter(BaseMemoryAdapter):
                     "invalid_at": str(result.invalid_at) if hasattr(result, "invalid_at") and result.invalid_at else None,
                 }
                 
+                # Get external metadata (with Kive context)
+                external_metadata = bridge.get_external_metadata(request)
+                # Merge with result metadata
+                merged_metadata = {**result_metadata, **external_metadata}
+                
                 # Create Memo (search results don't have episode_id)
                 memo = self._create_memo(
                     memo_id=result_id,
@@ -393,12 +438,12 @@ class GraphitiAdapter(BaseMemoryAdapter):
                     episode_id=result_id,  # Use edge UUID as fallback
                     source="search_result",
                     source_description="hybrid search result",
-                    metadata=result_metadata,
+                    metadata=merged_metadata,
                     score=result_score,
                 )
                 memos.append(memo)
             
-            logger.info(f"Search completed: query='{query}', results={len(memos)}")
+            logger.info(f"Search completed: query='{request.query}', results={len(memos)}")
             return memos
             
         except Exception as e:
@@ -467,8 +512,25 @@ class GraphitiAdapter(BaseMemoryAdapter):
             # Delete old episode first
             await self.delete(memo)
             
+            # Reconstruct AddMemoRequest from document + memo context
+            from ...models import AddMemoRequest
+            
+            # Extract Kive context from original memo metadata
+            request = AddMemoRequest(
+                text=document.text,
+                # Restore context from memo metadata (with fallback to defaults)
+                app_id=memo.metadata.get("_kive_app_id", "default"),
+                user_id=memo.metadata.get("_kive_user_id", "default"),
+                namespace=memo.metadata.get("_kive_namespace", "default"),
+                ai_id=memo.metadata.get("_kive_ai_id", "default"),
+                tenant_id=memo.metadata.get("_kive_tenant_id", "default"),
+                session_id=memo.metadata.get("_kive_session_id", "default"),
+                # Merge document metadata with original metadata (document takes priority)
+                metadata={**memo.metadata, **(document.metadata or {})},
+            )
+            
             # Add new episode
-            new_memos = await self.add([document], **kwargs)
+            new_memos = await self.add(request)
             
             if not new_memos:
                 raise AdapterError("Failed to create new episode after update")

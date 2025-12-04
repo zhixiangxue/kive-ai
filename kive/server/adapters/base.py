@@ -6,12 +6,15 @@ Defines the interface that all memory engine adapters must implement
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from llama_index.core.schema import Document
 
 from ...models import Memo
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ...models import AddMemoRequest, SearchMemoRequest
 
 
 class BaseMemoryAdapter(ABC):
@@ -121,18 +124,14 @@ class BaseMemoryAdapter(ABC):
         pass
     
     @abstractmethod
-    async def add(self, documents: List[Document], **kwargs) -> List[Memo]:
+    async def add(self, request: 'AddMemoRequest') -> List[Memo]:
         """Add memories
         
         Args:
-            documents: List of Document objects
-            **kwargs: Backend-specific parameters
+            request: AddMemoRequest with text/file/url and context fields
             
         Returns:
-            List of Memo objects, each Memo.metadata contains backend tracking info:
-                - _backend_id: Backend original ID
-                - _backend_type: Backend type
-                - _dataset_id: Dataset ID
+            List of Memo objects with backend data and Kive metadata
             
         Raises:
             AdapterError: Raised when adding fails
@@ -140,18 +139,11 @@ class BaseMemoryAdapter(ABC):
         pass
     
     @abstractmethod
-    async def search(
-        self,
-        query: str,
-        limit: int = 10,
-        **kwargs
-    ) -> List[Memo]:
+    async def search(self, request: 'SearchMemoRequest') -> List[Memo]:
         """Search memories
         
         Args:
-            query: Query text
-            limit: Maximum number of results to return
-            **kwargs: Backend-specific parameters (e.g., filters)
+            request: SearchMemoRequest with query and context fields
             
         Returns:
             List of Memo objects with search results

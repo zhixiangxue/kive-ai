@@ -70,7 +70,15 @@ class Client:
         text: Optional[str] = None,
         file: Optional[str] = None,
         url: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        messages: Optional[List[Dict[str, str]]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        # Multi-tenancy context fields
+        app_id: str = "default",
+        user_id: str = "default",
+        namespace: str = "default",
+        ai_id: str = "default",
+        tenant_id: str = "default",
+        session_id: str = "default",
     ) -> AddMemoResponse:
         """Add single memo
         
@@ -78,7 +86,14 @@ class Client:
             text: Text content
             file: File path
             url: URL address
+            messages: Conversational messages (list of {"role": "user/assistant", "content": "..."})
             metadata: Metadata
+            app_id: Application ID (default: "default")
+            user_id: User ID (default: "default")
+            namespace: Namespace for data isolation (default: "default")
+            ai_id: AI/Agent ID (default: "default")
+            tenant_id: Tenant ID (default: "default")
+            session_id: Session ID (default: "default")
             
         Returns:
             AddMemoResponse containing memos list and count
@@ -86,15 +101,26 @@ class Client:
         Raises:
             KiveError: Raised when add fails
         """
-        data = {"metadata": metadata or {}}
+        data = {
+            "metadata": metadata or {},
+            # Include multi-tenancy context
+            "app_id": app_id,
+            "user_id": user_id,
+            "namespace": namespace,
+            "ai_id": ai_id,
+            "tenant_id": tenant_id,
+            "session_id": session_id,
+        }
         if text:
             data["text"] = text
+        elif messages:
+            data["messages"] = messages
         elif file:
             data["file"] = file
         elif url:
             data["url"] = url
         else:
-            raise KiveError("At least one of text/file/url must be provided")
+            raise KiveError("At least one of text/file/url/messages must be provided")
         
         response = await self.client.post(
             f"{self.server_url}/api/v1/memos",
@@ -174,6 +200,13 @@ class Client:
         self,
         query: str,
         limit: int = 10,
+        # Multi-tenancy context fields
+        app_id: str = "default",
+        user_id: str = "default",
+        namespace: str = "default",
+        ai_id: str = "default",
+        tenant_id: str = "default",
+        session_id: str = "default",
         **kwargs
     ) -> SearchResult:
         """搜索记忆
@@ -181,6 +214,12 @@ class Client:
         Args:
             query: 查询文本
             limit: 返回数量限制
+            app_id: Application ID (default: "default")
+            user_id: User ID (default: "default")
+            namespace: Namespace for data isolation (default: "default")
+            ai_id: AI/Agent ID (default: "default")
+            tenant_id: Tenant ID (default: "default")
+            session_id: Session ID (default: "default")
             **kwargs: 其他查询参数
             
         Returns:
@@ -189,7 +228,17 @@ class Client:
         Raises:
             KiveError: 搜索失败时抛出
         """
-        params = {"query": query, "limit": limit}
+        params = {
+            "query": query,
+            "limit": limit,
+            # Include multi-tenancy context
+            "app_id": app_id,
+            "user_id": user_id,
+            "namespace": namespace,
+            "ai_id": ai_id,
+            "tenant_id": tenant_id,
+            "session_id": session_id,
+        }
         params.update(kwargs)
         
         response = await self.client.get(
@@ -227,6 +276,9 @@ class Client:
     ) -> UpdateMemoResponse:
         """Update memo
         
+        Note: Multi-tenancy context is preserved from original memo's metadata,
+              no need to specify again.
+        
         Args:
             memo_id: Memo ID
             text: New text content
@@ -252,16 +304,19 @@ class Client:
         return UpdateMemoResponse(**result)
     
     async def delete(self, memo_ids: List[str]) -> bool:
-        """删除记忆
+        """Delete memos
+        
+        Note: Multi-tenancy context is already in memo metadata,
+              no need to specify filtering parameters.
         
         Args:
-            memo_ids: 记忆ID列表
+            memo_ids: Memo ID list
             
         Returns:
-            是否删除成功
+            Whether deletion succeeded
             
         Raises:
-            KiveError: 删除失败时抛出
+            KiveError: Raised when delete fails
         """
         response = await self.client.request(
             "DELETE",

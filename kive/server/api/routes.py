@@ -23,7 +23,6 @@ from ...models import (
     UpdateMemoRequest,
     UpdateMemoResponse,
 )
-from ...utils.document import create_document_from_request, url_to_documents
 from ...utils.logger import logger
 
 router = APIRouter(prefix="/api/v1")
@@ -62,22 +61,8 @@ async def add_memo(req: AddMemoRequest, request: Request):
         adapter = get_adapter(request)
         cache = get_cache(request)
         
-        # 转换为Documents
-        if req.url:
-            # URL需要异步处理
-            documents = await url_to_documents(req.url)
-            if req.metadata:
-                for doc in documents:
-                    doc.metadata.update(req.metadata)
-        else:
-            documents = create_document_from_request(
-                text=req.text,
-                file=req.file,
-                metadata=req.metadata
-            )
-        
-        # 添加到adapter, 返回Memo列表
-        memos = await adapter.add(documents)
+        # 直接传递 request 给 adapter
+        memos = await adapter.add(req)
         
         # 保存到cache
         for memo in memos:
@@ -106,22 +91,9 @@ async def add_memos_batch(req: AddMemoBatchRequest, request: Request):
         cache = get_cache(request)
         all_memos = []
         
+        # 批量添加：遍历每个item，直接传递给adapter
         for item in req.items:
-            # 转换为Documents
-            if item.url:
-                documents = await url_to_documents(item.url)
-                if item.metadata:
-                    for doc in documents:
-                        doc.metadata.update(item.metadata)
-            else:
-                documents = create_document_from_request(
-                    text=item.text,
-                    file=item.file,
-                    metadata=item.metadata
-                )
-            
-            # 添加到adapter, 返回Memo列表
-            memos = await adapter.add(documents)
+            memos = await adapter.add(item)
             all_memos.extend(memos)
         
         # 保存到cache
@@ -225,9 +197,15 @@ async def search_memos(
     try:
         adapter = get_adapter(request)
         
+        # Import SearchMemoRequest
+        from ...models import SearchMemoRequest
+        
+        # Create SearchMemoRequest
+        search_req = SearchMemoRequest(query=query, limit=limit)
+        
         start_time = time.time()
-        # adapter.search() 现在直接返回Memo列表
-        memos = await adapter.search(query, limit=limit)
+        # 直接传递 SearchMemoRequest 给 adapter
+        memos = await adapter.search(search_req)
         took_ms = (time.time() - start_time) * 1000
         
         return SearchResult(

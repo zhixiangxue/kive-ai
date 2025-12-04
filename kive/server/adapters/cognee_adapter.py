@@ -325,37 +325,61 @@ class CogneeAdapter(BaseMemoryAdapter):
             updated_at=datetime.now(),
         )
     
-    async def add(self, documents: List[Document], **kwargs) -> List[Memo]:
-        """Add documents to cognee"""
+    async def add(self, request: 'AddMemoRequest') -> List[Memo]:
+        """Add documents to cognee
+        
+        Args:
+            request: AddMemoRequest with text/file/url and context fields
+        """
         try:
             if not self._cognee:
                 raise AdapterError("Cognee not initialized, call initialize() first")
             
-            logger.info(f"Starting add operation for {len(documents)} documents...")
+            # Import models
+            from .request_bridge import RequestBridge
+            from ...models import AddMemoRequest
             
-            # Cognee's add method accepts text, file paths, or binary streams
+            logger.info(f"Starting add operation with request: app_id={request.app_id}, namespace={request.namespace}")
+            
+            # Use bridge to get Cognee parameters
+            bridge = RequestBridge()
+            cognee_params = bridge.to_cognee_add(request)
+            
+            # Get dataset_name and user_id
+            dataset_name = cognee_params["dataset_name"]
+            user_id = cognee_params["user_id"]
+            
+            # TODO: Convert user_id to User object
+            # user = await get_or_create_user(user_id)
+            
+            # Prepare data from request
             data_to_add = []
             
-            for doc in documents:
-                # If Document has file_path metadata, use file path
-                if "file_path" in doc.metadata:
-                    data_to_add.append(doc.metadata["file_path"])
-                else:
-                    # Otherwise use text content
-                    data_to_add.append(doc.text)
+            # AddMemoRequest can have text, file, url, or messages
+            if request.text:
+                data_to_add.append(request.text)
+            elif request.messages:
+                # Convert messages to text for Cognee
+                text_content = bridge._convert_messages_to_text(request.messages)
+                data_to_add.append(text_content)
+            elif request.file:
+                data_to_add.append(request.file)
+            elif request.url:
+                # TODO: Handle URL ingestion
+                data_to_add.append(request.url)
             
-            logger.info(f"Prepared {len(data_to_add)} items to add")
+            logger.info(f"Prepared {len(data_to_add)} items to add to dataset '{dataset_name}'")
             
             # Call cognee.add
-            dataset_name = kwargs.get("dataset_name", "kive_dataset")
             result = await self._cognee.add(
                 data=data_to_add,
                 dataset_name=dataset_name,
+                # user=user,  # TODO: Pass User object when available
             )
             
             logger.info(f"Cognee.add() completed, result: {result}")
             
-            # Extract data_id and dataset_id from result, generate Memo list
+            # Extract data_id and dataset_id from result
             memos = []
             dataset_id = str(result.dataset_id) if hasattr(result, 'dataset_id') else None
             
@@ -363,59 +387,75 @@ class CogneeAdapter(BaseMemoryAdapter):
                 for i, item in enumerate(result.data_ingestion_info):
                     if isinstance(item, dict) and 'data_id' in item:
                         data_id = str(item['data_id'])
-                        doc = documents[i] if i < len(documents) else Document(text="")
+                        
+                        # Get text content from request (handle messages conversion)
+                        text_content = request.text
+                        if not text_content and request.messages:
+                            text_content = bridge._convert_messages_to_text(request.messages)
+                        if not text_content:
+                            text_content = request.file or request.url or ""
+                        
+                        # Get external metadata (with Kive context)
+                        external_metadata = bridge.get_external_metadata(request)
                         
                         # Generate Memo with CogneeBackendData
                         memo = self._create_memo(
                             memo_id=data_id,
-                            text=doc.text,
+                            text=text_content,
                             data_id=data_id,
                             dataset_id=dataset_id,
-                            metadata=doc.metadata,
+                            metadata=external_metadata,
                         )
                         memos.append(memo)
                     else:
                         logger.warning(f"Unexpected item format in data_ingestion_info: {item}")
             
             if not memos:
-                # If no data_ingestion_info, the add operation failed
                 raise AdapterError("Failed to add documents: no data_id returned from Cognee")
             
             logger.info(f"Generated {len(memos)} memos")
             
             # Increment pending count
-            self.increment_pending(len(documents))
+            self.increment_pending(len(data_to_add))
             
-            logger.info(f"Added {len(documents)} documents to cognee dataset '{dataset_name}'")
+            logger.info(f"Added {len(data_to_add)} items to cognee dataset '{dataset_name}'")
             return memos
             
         except Exception as e:
             logger.error(f"Failed to add documents: {e}")
             raise AdapterError(f"Failed to add documents: {e}")
     
-    async def search(
-        self,
-        query: str,
-        limit: int = 10,
-        query_type: str = "CHUNKS",
-        **kwargs
-    ) -> List[Memo]:
+    async def search(self, request: 'SearchMemoRequest') -> List[Memo]:
         """Search in cognee
         
         Args:
-            query: Search query text
-            limit: Maximum number of results
-            query_type: Cognee search type (CHUNKS/GRAPH_COMPLETION/INSIGHTS/etc.)
-            **kwargs: Additional parameters (datasets, etc.)
+            request: SearchMemoRequest with query and context fields
         """
         try:
             if not self._cognee:
                 raise AdapterError("Cognee not initialized")
             
-            # Import SearchType
+            # Import models
+            from .request_bridge import RequestBridge
+            from ...models import SearchMemoRequest
             from cognee.modules.search.types import SearchType
             
-            # Parse query_type
+            logger.info(f"Starting search with query='{request.query}', namespace={request.namespace}")
+            
+            # Use bridge to get Cognee parameters
+            bridge = RequestBridge()
+            cognee_params = bridge.to_cognee_search(request)
+            
+            # Get datasets and session_id
+            datasets = cognee_params.get("datasets")
+            session_id = cognee_params.get("session_id")
+            user_id = cognee_params.get("user_id")
+            
+            # TODO: Convert user_id to User object
+            # user = await get_or_create_user(user_id)
+            
+            # Parse query_type (default to CHUNKS)
+            query_type = "CHUNKS"  # TODO: Add query_type to SearchMemoRequest if needed
             try:
                 search_type = SearchType[query_type]
             except KeyError:
@@ -423,51 +463,59 @@ class CogneeAdapter(BaseMemoryAdapter):
                 search_type = SearchType.CHUNKS
             
             # Call cognee.search
-            search_results = await self._cognee.search(
-                query_text=query,
-                query_type=search_type,
-                top_k=limit,
-                datasets=kwargs.get("datasets"),
-            )
+            search_kwargs = {
+                "query_text": request.query,
+                "query_type": search_type,
+                "top_k": request.limit,
+                "datasets": datasets,
+                # "user": user,  # TODO: Pass User object when available
+            }
+            
+            # Add session_id if provided
+            if session_id:
+                search_kwargs["session_id"] = session_id
+            
+            search_results = await self._cognee.search(**search_kwargs)
             
             logger.info(f"Search returned {len(search_results) if search_results else 0} results")
             
             # Convert cognee search results to Memo list
             memos = []
-            for i, result in enumerate(search_results[:limit] if search_results else []):
+            for i, result in enumerate(search_results[:request.limit] if search_results else []):
                 # Cognee SearchResult format varies by query_type
                 if isinstance(result, dict):
-                    # Already a dict
                     result_id = result.get("id", f"search_result_{i}")
                     result_text = result.get("text", "")
                     result_score = result.get("score", 1.0 - (i * 0.05))
                     result_metadata = result.get("metadata", {})
                 elif isinstance(result, str):
-                    # GRAPH_COMPLETION returns text
                     result_id = f"search_result_{i}"
                     result_text = result
                     result_score = 1.0 - (i * 0.05)
                     result_metadata = {}
                 else:
-                    # SearchResult object
                     result_id = getattr(result, "id", f"search_result_{i}")
                     result_text = getattr(result, "text", str(result))
                     result_score = getattr(result, "score", 1.0 - (i * 0.05))
                     result_metadata = getattr(result, "metadata", {})
                 
+                # Get external metadata (with Kive context)
+                external_metadata = bridge.get_external_metadata(request)
+                # Merge with result metadata
+                merged_metadata = {**result_metadata, **external_metadata}
+                
                 # Create Memo with CogneeBackendData
-                # Note: Search results may not have data_id/dataset_id
                 memo = self._create_memo(
                     memo_id=result_id,
                     text=result_text,
-                    data_id=result_id,  # Use result_id as fallback
-                    dataset_id="unknown",  # Search results don't include dataset_id
-                    metadata=result_metadata,
+                    data_id=result_id,
+                    dataset_id="unknown",
+                    metadata=merged_metadata,
                     score=result_score,
                 )
                 memos.append(memo)
             
-            logger.info(f"Search completed: query='{query}', results={len(memos)}")
+            logger.info(f"Search completed: query='{request.query}', results={len(memos)}")
             return memos
             
         except Exception as e:

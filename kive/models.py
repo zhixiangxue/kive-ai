@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, model_validator
 from pydantic import ConfigDict
 
 
@@ -152,19 +152,89 @@ class SearchResult(BaseModel):
         }
 
 
-class AddMemoRequest(BaseModel):
-    """添加记忆请求"""
+class BaseMemoRequest(BaseModel):
+    """Base memo request with unified context fields"""
     
-    text: Optional[str] = Field(None, description="文本内容")
-    file: Optional[str] = Field(None, description="文件路径")
-    url: Optional[str] = Field(None, description="URL地址")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="元数据")
+    # Context fields (all have defaults)
+    app_id: str = Field(default="default", description="Application ID for multi-app isolation")
+    user_id: str = Field(default="default", description="User ID")
+    namespace: str = Field(default="default", description="Namespace for scoping (maps to dataset in Cognee)")
+    ai_id: str = Field(default="default", description="AI role ID")
+    session_id: str = Field(default="default", description="Session ID for temporary context")
+    tenant_id: str = Field(default="default", description="Tenant ID for B2B isolation")
+    
+    # User metadata (passthrough)
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     
     class Config:
+        extra = "forbid"  # Strict mode: reject undefined fields
         json_schema_extra = {
             "example": {
-                "text": "这是一段记忆",
+                "app_id": "my_app",
+                "user_id": "U123",
+                "namespace": "personal",
+                "ai_id": "assistant",
                 "metadata": {"source": "user_input"},
+            }
+        }
+
+
+class AddMemoRequest(BaseMemoRequest):
+    """Add memo request (inherits context fields from BaseMemoRequest)"""
+    
+    text: Optional[str] = Field(None, description="Text content")
+    file: Optional[str] = Field(None, description="File path")
+    url: Optional[str] = Field(None, description="URL address")
+    messages: Optional[List[Dict[str, str]]] = Field(
+        None, 
+        description="Conversational messages (role + content), alternative to text for chat-based memory"
+    )
+    
+    @model_validator(mode='after')
+    def validate_content_source(self) -> 'AddMemoRequest':
+        """Ensure at least one content source is provided and file exists"""
+        if not any([self.text, self.file, self.url, self.messages]):
+            raise ValueError("At least one of text/file/url/messages must be provided")
+        
+        # Validate file existence if file path is provided
+        if self.file:
+            from pathlib import Path
+            file_path = Path(self.file)
+            if not file_path.exists():
+                raise ValueError(f"File does not exist: {self.file}")
+            if not file_path.is_file():
+                raise ValueError(f"Path is not a file: {self.file}")
+        
+        return self
+    
+    class Config:
+        extra = "forbid"
+        json_schema_extra = {
+            "example": {
+                "app_id": "my_app",
+                "user_id": "U123",
+                "namespace": "personal",
+                "text": "This is a memory",
+                "metadata": {"source": "user_input"},
+            }
+        }
+
+
+class SearchMemoRequest(BaseMemoRequest):
+    """Search memo request (inherits context fields from BaseMemoRequest)"""
+    
+    query: str = Field(..., description="Search query text")
+    limit: int = Field(default=10, description="Maximum number of results")
+    
+    class Config:
+        extra = "forbid"
+        json_schema_extra = {
+            "example": {
+                "app_id": "my_app",
+                "user_id": "U123",
+                "namespace": "personal",
+                "query": "Find related memories",
+                "limit": 10,
             }
         }
 
