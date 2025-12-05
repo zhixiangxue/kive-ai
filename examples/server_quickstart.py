@@ -13,18 +13,26 @@ Requirements:
 - For local embedding: Start Ollama service (ollama serve)
 """
 
+import os
+from dotenv import load_dotenv
 from kive.server import Server
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 # =============================================================================
 # Common Configuration (shared by all engines)
 # =============================================================================
 
+# Get API key from environment
+API_KEY = os.getenv("DASHSCOPE_API_KEY", "sk-***")
+
 # LLM Configuration (for knowledge extraction)
 LLM_CONFIG = {
     "llm_provider": "bailian",  # openai, anthropic, bailian, moonshot, ollama, etc.
     "llm_model": "qwen-plus",
-    "llm_api_key": "sk-***",  # Replace with your API key
+    "llm_api_key": API_KEY,
     "llm_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
 }
 

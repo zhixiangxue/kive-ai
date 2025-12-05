@@ -8,10 +8,10 @@ from datetime import datetime
 
 from llama_index.core.schema import Document
 
-from ...exceptions import AdapterError, ConnectionError, SearchError
-from ...models import BackendType, Mem0BackendData, Memo
+from ..exceptions import AdapterError, ConnectionError, SearchError
+from ..models import BackendType, Mem0BackendData, Memo
 from .base import BaseMemoryAdapter
-from ...utils.logger import logger
+from ..utils.logger import logger
 from .llm_bridge import LLMConfigBridge, UnifiedLLMConfig, LLMProvider, LLMProviderType
 
 
@@ -310,7 +310,7 @@ class Mem0Adapter(BaseMemoryAdapter):
             
             # Import models
             from .request_bridge import RequestBridge
-            from ...models import AddMemoRequest
+            from ..models import AddMemoRequest
             
             logger.info(f"Starting add operation with request: namespace={request.namespace}, user_id={request.user_id}")
             
@@ -408,7 +408,7 @@ class Mem0Adapter(BaseMemoryAdapter):
             
             # Import models
             from .request_bridge import RequestBridge
-            from ...models import SearchMemoRequest
+            from ..models import SearchMemoRequest
             
             # Use bridge to get Mem0 parameters
             bridge = RequestBridge()

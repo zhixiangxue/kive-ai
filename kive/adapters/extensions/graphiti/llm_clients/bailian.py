@@ -15,7 +15,7 @@ Status: Production-ready ✅
 Upstream Issue: N/A (API limitation, not a bug)
 
 Usage:
-    from kive.server.adapters.extensions.graphiti.llm_clients import BailianLLMClient
+    from kive.adapters.extensions.graphiti.llm_clients import BailianLLMClient
     
     llm_client = BailianLLMClient(config=llm_config)
 """

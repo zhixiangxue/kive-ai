@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 
 from llama_index.core.schema import Document
 
-from ...exceptions import AdapterError, ConnectionError, SearchError
-from ...models import BackendType, GraphitiBackendData, Memo
+from ..exceptions import AdapterError, ConnectionError, SearchError
+from ..models import BackendType, GraphitiBackendData, Memo
 from .base import BaseMemoryAdapter
-from ...utils.logger import logger
+from ..utils.logger import logger
 from .llm_bridge import LLMConfigBridge, UnifiedLLMConfig, LLMProvider, LLMProviderType
 
 
@@ -333,7 +333,7 @@ class GraphitiAdapter(BaseMemoryAdapter):
             
             # Import models
             from .request_bridge import RequestBridge
-            from ...models import AddMemoRequest
+            from ..models import AddMemoRequest
             from graphiti_core.nodes import EpisodeType
             
             logger.info(f"Starting add operation with request: namespace={request.namespace}, user_id={request.user_id}")
@@ -389,7 +389,7 @@ class GraphitiAdapter(BaseMemoryAdapter):
             
             # Import models
             from .request_bridge import RequestBridge
-            from ...models import SearchMemoRequest
+            from ..models import SearchMemoRequest
             
             logger.info(f"Starting search with query='{request.query}', namespace={request.namespace}")
             
@@ -513,7 +513,7 @@ class GraphitiAdapter(BaseMemoryAdapter):
             await self.delete(memo)
             
             # Reconstruct AddMemoRequest from document + memo context
-            from ...models import AddMemoRequest
+            from ..models import AddMemoRequest
             
             # Extract Kive context from original memo metadata
             request = AddMemoRequest(

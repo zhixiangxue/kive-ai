@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routes import router
 from .cache import MemoCache
-from .adapters.base import BaseMemoryAdapter
+from ..adapters.base import BaseMemoryAdapter
 from ..utils.logger import logger, LOG_LEVEL
 
 

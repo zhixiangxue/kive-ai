@@ -8,10 +8,10 @@ from datetime import datetime
 
 from llama_index.core.schema import Document
 
-from ...exceptions import AdapterError, ConnectionError, SearchError
-from ...models import BackendType, CogneeBackendData, Memo
+from ..exceptions import AdapterError, ConnectionError, SearchError
+from ..models import BackendType, CogneeBackendData, Memo
 from .base import BaseMemoryAdapter
-from ...utils.logger import logger
+from ..utils.logger import logger
 from .llm_bridge import LLMConfigBridge, UnifiedLLMConfig, LLMProvider, LLMProviderType
 
 
@@ -337,7 +337,7 @@ class CogneeAdapter(BaseMemoryAdapter):
             
             # Import models
             from .request_bridge import RequestBridge
-            from ...models import AddMemoRequest
+            from ..models import AddMemoRequest
             
             logger.info(f"Starting add operation with request: app_id={request.app_id}, namespace={request.namespace}")
             
@@ -437,7 +437,7 @@ class CogneeAdapter(BaseMemoryAdapter):
             
             # Import models
             from .request_bridge import RequestBridge
-            from ...models import SearchMemoRequest
+            from ..models import SearchMemoRequest
             from cognee.modules.search.types import SearchType
             
             logger.info(f"Starting search with query='{request.query}', namespace={request.namespace}")

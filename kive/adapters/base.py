@@ -10,11 +10,11 @@ from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from llama_index.core.schema import Document
 
-from ...models import Memo
-from ...utils.logger import logger
+from ..models import Memo
+from ..utils.logger import logger
 
 if TYPE_CHECKING:
-    from ...models import AddMemoRequest, SearchMemoRequest
+    from ..models import AddMemoRequest, SearchMemoRequest
 
 
 class BaseMemoryAdapter(ABC):

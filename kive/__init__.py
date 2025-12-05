@@ -11,6 +11,7 @@ Kive - A lightweight memory system glue layer
 __version__ = "0.1.0"
 
 # Public exports
+from .memory import Memory
 from .models import Memo, SearchResult
 from .exceptions import (
     KiveError,
@@ -22,6 +23,7 @@ from .exceptions import (
 
 __all__ = [
     "__version__",
+    "Memory",
     "Memo",
     "SearchResult",
     "KiveError",

@@ -31,7 +31,7 @@ TODO: Remove when Graphiti fixes this issue upstream
 Upstream Issue: https://github.com/getzep/graphiti (pending report)
 
 Usage:
-    from kive.server.adapters.extensions.graphiti.drivers import patch_kuzu_fulltext_indices
+    from kive.adapters.extensions.graphiti.drivers import patch_kuzu_fulltext_indices
     
     # After creating KuzuDriver, before initializing Graphiti
     driver = KuzuDriver(db=db_path)

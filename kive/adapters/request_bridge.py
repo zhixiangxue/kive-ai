@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 # Import BaseMemoRequest from models (avoid circular import by using TYPE_CHECKING)
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from ...models import BaseMemoRequest, AddMemoRequest, SearchMemoRequest
+    from ..models import BaseMemoRequest, AddMemoRequest, SearchMemoRequest
 
 
 class RequestBridge:
