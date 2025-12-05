@@ -211,3 +211,4 @@ playground/
 .kive/
 tmp/
 tests/
+.vscode/
